@@ -23,6 +23,7 @@ import {
   PARAMETRIC_MODELS,
   parametricModelSupportsVision,
 } from '@/lib/utils';
+import { randomUUID } from '@/lib/randomUUID';
 import { CreativeModel, MeshFileType, Model } from '@shared/types';
 import type { AppUIMessage } from '@shared/chatAi';
 import { imageFilePartUrl } from '@shared/imageRefs';
@@ -990,7 +991,7 @@ function TextAreaChat({
     }
 
     filteredMeshes.forEach(async (file) => {
-      const tempId = crypto.randomUUID();
+      const tempId = randomUUID();
       const fileType = getMeshFileType(file.name);
       setMesh({ id: tempId, isUploading: true, source: 'upload', fileType });
       try {
@@ -1006,7 +1007,7 @@ function TextAreaChat({
           // Generate multi-angle renders and upload as images
           const renders = await renderMultipleAngles(geometry, boundingBox);
           for (const renderBlob of renders) {
-            const renderId = crypto.randomUUID();
+            const renderId = randomUUID();
             const renderFile = new File(
               [renderBlob],
               `render-${renderId}.png`,
@@ -1061,7 +1062,7 @@ function TextAreaChat({
 
     // Upload each valid image immediately
     filteredImages.forEach(async (file) => {
-      const tempId = crypto.randomUUID();
+      const tempId = randomUUID();
       const url = URL.createObjectURL(file);
       setImages((prevImages) => [
         ...prevImages,

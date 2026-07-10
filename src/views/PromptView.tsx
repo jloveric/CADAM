@@ -16,6 +16,7 @@ import { NewProductBanner } from '@/components/NewProductBanner';
 import { FreePlanTrialPill } from '@/components/FreePlanTrialPill';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { cn } from '@/lib/utils';
+import { randomUUID } from '@/lib/randomUUID';
 import { SelectedItemsContext } from '@/contexts/SelectedItemsContext';
 import posthog from 'posthog-js';
 import * as Sentry from '@sentry/react';
@@ -82,7 +83,7 @@ export function PromptView() {
   const [mesh, setMesh] = useState<MessageItem | null>(null);
 
   const [draftConversationId, setDraftConversationId] = useState(() =>
-    crypto.randomUUID(),
+    randomUUID(),
   );
 
   const lowPrompts = useMemo(() => {
@@ -197,7 +198,7 @@ export function PromptView() {
 
       const chat = createAndCacheAiChat({
         id: conversation.id,
-        generateId: () => crypto.randomUUID(),
+        generateId: () => randomUUID(),
         messages: [],
         transport: new DefaultChatTransport<AppUIMessage>({
           api: apiUrl(
@@ -240,7 +241,7 @@ export function PromptView() {
       navigate({ to: '/editor/$id', params: { id: data.conversationId } });
     },
     onError: (error) => {
-      setDraftConversationId(crypto.randomUUID());
+      setDraftConversationId(randomUUID());
       Sentry.captureException(error);
       toast({
         title: 'Error',

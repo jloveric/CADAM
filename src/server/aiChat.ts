@@ -1,11 +1,12 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { chatTools, type AppUIMessage, type AppTools } from '@shared/chatAi';
 import { cleanAssistantText, getParametricText } from '@shared/parametricParts';
 import { imageIdFromFilename, imageStoragePath } from '@shared/imageRefs';
 import { normalizeConversationSuggestions } from '@shared/suggestions';
-import { normalizeModelId } from '@shared/models';
+import { normalizeModelId, openaiModelConfig } from '@shared/models';
 import type { Conversation, Message, MeshFileType, Model } from '@shared/types';
 import {
   convertToModelMessages,
@@ -77,6 +78,30 @@ const MODEL_PRICES: Record<
     output: 30,
     cacheRead: 0.5,
     cacheWrite: 6.25,
+  },
+  'openai/gpt-5.5': {
+    input: 5,
+    output: 30,
+    cacheRead: 0.5,
+    cacheWrite: 6.25,
+  },
+  'openai/gpt-5.4-mini': {
+    input: 0.75,
+    output: 4.5,
+    cacheRead: 0.075,
+    cacheWrite: 0.9375,
+  },
+  'openai/gpt-5.4-mini-medium': {
+    input: 0.75,
+    output: 4.5,
+    cacheRead: 0.075,
+    cacheWrite: 0.9375,
+  },
+  'openai/gpt-5.4-nano': {
+    input: 0.2,
+    output: 1.25,
+    cacheRead: 0.02,
+    cacheWrite: 0.25,
   },
 
   // MoonshotAI
@@ -315,16 +340,18 @@ function jsonResponse(body: unknown, status: number) {
 const THINKING_BUDGET_TOKENS = 9000;
 const PARAMETRIC_MAX_OUTPUT_TOKENS = 64000;
 
-type ChatProvider = 'anthropic' | 'google' | 'openrouter';
+type ChatProvider = 'anthropic' | 'google' | 'openai' | 'openrouter';
 
 function providerFor(modelId: string): ChatProvider {
   if (modelId.startsWith('anthropic/')) return 'anthropic';
   if (modelId.startsWith('google/')) return 'google';
+  if (modelId.startsWith('openai/')) return 'openai';
   return 'openrouter';
 }
 
 type AnthropicProvider = ReturnType<typeof createAnthropic>;
 type GoogleProvider = ReturnType<typeof createGoogleGenerativeAI>;
+type OpenAIProvider = ReturnType<typeof createOpenAI>;
 
 // The Vercel AI SDK's Anthropic provider expects ANTHROPIC_BASE_URL to already
 // include the "/v1" path segment (its built-in default is
@@ -340,15 +367,24 @@ function normalizedAnthropicBaseURL(): string | undefined {
   return base.endsWith('/v1') ? base : `${base}/v1`;
 }
 
+function normalizedOpenAIBaseURL(): string | undefined {
+  const raw = env('OPENAI_BASE_URL').trim();
+  if (!raw) return undefined;
+  const base = raw.replace(/\/+$/, '');
+  return base.endsWith('/v1') ? base : `${base}/v1`;
+}
+
 type ChatProviders = {
   anthropic: () => AnthropicProvider;
   google: () => GoogleProvider;
+  openai: () => OpenAIProvider;
   openrouter: () => ReturnType<typeof createOpenRouter>;
 };
 
 function createChatProviders(): ChatProviders {
   let anthropic: AnthropicProvider | undefined;
   let google: GoogleProvider | undefined;
+  let openai: OpenAIProvider | undefined;
   let openrouter: ReturnType<typeof createOpenRouter> | undefined;
   return {
     anthropic: () => {
@@ -367,6 +403,16 @@ function createChatProviders(): ChatProviders {
       });
       return google;
     },
+    openai: () => {
+      if (!openai) {
+        const baseURL = normalizedOpenAIBaseURL();
+        openai = createOpenAI({
+          apiKey: requiredEnv('OPENAI_API_KEY'),
+          ...(baseURL ? { baseURL } : {}),
+        });
+      }
+      return openai;
+    },
     openrouter: () => {
       openrouter ??= createOpenRouter({
         apiKey: requiredEnv('OPENROUTER_API_KEY'),
@@ -380,9 +426,8 @@ function createChatProviders(): ChatProviders {
  * Map a `<provider>/<model>` ID to a configured LanguageModel + the
  * provider-specific options the AI SDK expects at the streamText boundary.
  *
- * Anthropic and Google are hit directly via their respective AI SDK providers.
- * Everything else (OpenAI, MoonshotAI, …) keeps going through OpenRouter so we
- * don't have to wire a dedicated provider per vendor.
+ * Anthropic, Google, and OpenAI are hit directly via their AI SDK providers.
+ * Other vendors (MoonshotAI, Z.AI, …) keep going through OpenRouter.
  */
 function buildChatModel(
   modelId: string,
@@ -392,6 +437,22 @@ function buildChatModel(
 ): { model: LanguageModel; providerOptions?: ProviderOptions } {
   const hasCappedThinkingBudget =
     thinking && thinkingBudget !== THINKING_BUDGET_TOKENS;
+
+  if (modelId.startsWith('openai/')) {
+    const { apiModel, reasoningEffort } = openaiModelConfig(modelId);
+    const effort =
+      reasoningEffort ?? (hasCappedThinkingBudget ? 'low' : 'high');
+    return {
+      model: providers.openai().chat(apiModel),
+      providerOptions: thinking
+        ? {
+            openai: {
+              reasoningEffort: effort,
+            },
+          }
+        : undefined,
+    };
+  }
 
   if (providerFor(modelId) === 'openrouter') {
     return {

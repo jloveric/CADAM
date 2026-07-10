@@ -25,6 +25,7 @@ import {
 import parseParameters from '@shared/parseParameters';
 import { normalizeModelId } from '@shared/models';
 import { supabase } from '@/lib/supabase';
+import { randomUUID } from '@/lib/randomUUID';
 import { updateParameter } from '@/lib/utils';
 import {
   persistAssistantParts,
@@ -332,7 +333,7 @@ function ConversationEditor() {
 
   const handleRestore = useCallback(
     async (assistant: ChatMessage) => {
-      const newId = crypto.randomUUID();
+      const newId = randomUUID();
       const parts = JSON.parse(JSON.stringify(assistant.parts));
       const metadata = JSON.parse(JSON.stringify(assistant.metadata ?? {}));
       // Restore only fires for assistants in the UI, so the role is

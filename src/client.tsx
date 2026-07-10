@@ -20,12 +20,20 @@ function getSentryTracesSampleRate() {
 
 const router = getRouter();
 
-Sentry.init({
-  dsn: import.meta.env.VITE_SENTRY_DSN ?? '',
-  environment: import.meta.env.VITE_SENTRY_ENVIRONMENT ?? 'local',
-  integrations: [Sentry.tanstackRouterBrowserTracingIntegration(router)],
-  tracesSampleRate: getSentryTracesSampleRate(),
-});
+const sentryDsn = (import.meta.env.VITE_SENTRY_DSN ?? '').trim();
+const hasValidSentryDsn =
+  sentryDsn.length > 0 &&
+  !sentryDsn.includes('<') &&
+  (sentryDsn.startsWith('http://') || sentryDsn.startsWith('https://'));
+
+if (hasValidSentryDsn) {
+  Sentry.init({
+    dsn: sentryDsn,
+    environment: import.meta.env.VITE_SENTRY_ENVIRONMENT ?? 'local',
+    integrations: [Sentry.tanstackRouterBrowserTracingIntegration(router)],
+    tracesSampleRate: getSentryTracesSampleRate(),
+  });
+}
 
 startTransition(() => {
   hydrateRoot(

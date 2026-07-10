@@ -1,15 +1,18 @@
 import posthog from 'posthog-js';
 import { apiUrl } from '@/services/api';
 
-const POSTHOG_KEY =
+const rawPostHogKey =
   import.meta.env.VITE_POSTHOG_PROJECT_KEY ?? import.meta.env.VITE_POSTHOG_KEY;
+const POSTHOG_KEY =
+  typeof rawPostHogKey === 'string' ? rawPostHogKey.trim() : '';
+const hasValidPostHogKey = POSTHOG_KEY.length > 0 && !POSTHOG_KEY.includes('<');
 const POSTHOG_HOST =
   import.meta.env.VITE_POSTHOG_HOST || apiUrl('jackson-pollock');
 
 let isInitialized = false;
 
 export const initPostHog = () => {
-  if (!POSTHOG_KEY) {
+  if (!hasValidPostHogKey) {
     console.warn('PostHog key not configured. Analytics disabled.');
     return;
   }

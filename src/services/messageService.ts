@@ -1,4 +1,5 @@
 import { useConversation } from '@/contexts/ConversationContext';
+import { randomUUID } from '@/lib/randomUUID';
 import { supabase } from '@/lib/supabase';
 import type { AppUIMessage } from '@shared/chatAi';
 import type { Conversation, Message } from '@shared/types';
@@ -27,7 +28,7 @@ export async function persistUserMessage({
   metadata: AppUIMessage['metadata'];
   parentMessageId: string | null;
 }): Promise<string> {
-  const id = crypto.randomUUID();
+  const id = randomUUID();
   const { error } = await supabase.from('messages').insert({
     id,
     conversation_id: conversationId,
@@ -194,7 +195,7 @@ export function useRestoreMessageMutation({
         'role' | 'parts' | 'metadata' | 'parent_message_id'
       >;
     }) => {
-      const newId = crypto.randomUUID();
+      const newId = randomUUID();
       const { error } = await supabase.from('messages').insert({
         id: newId,
         conversation_id: conversation.id,
