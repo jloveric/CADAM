@@ -10,6 +10,7 @@ import { toast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { ssoProvider } from '@/lib/supabase';
 import { signInWithSsoProvider } from '@/lib/ssoAuth';
+import { authBypass } from '@/lib/authBypass';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -25,6 +26,9 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   useEffect(() => {
     if (!isLoading && !session && !user) {
+      // Experiment mode handles sign-in in AuthProvider; don't bounce to /signin.
+      if (authBypass) return;
+
       // Capture current path for redirect after authentication
       // Only include pathname and search to avoid security issues
       const currentPath = location.pathname + location.searchStr;
@@ -74,7 +78,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
   if (!session || !user) {
     // In SSO mode the effect above is redirecting the browser to the
     // provider — keep the spinner up instead of flashing a blank frame.
-    if (ssoProvider) {
+    if (ssoProvider || authBypass) {
       return (
         <div className="flex min-h-screen items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-blue-500" />

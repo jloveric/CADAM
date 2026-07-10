@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase, ssoProvider } from '@/lib/supabase';
 import { signInWithSsoProvider } from '@/lib/ssoAuth';
+import { authBypass } from '@/lib/authBypass';
 import TextAreaChat from '@/components/TextAreaChat';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { useState, useMemo, useEffect } from 'react';
@@ -268,7 +269,7 @@ export function PromptView() {
             'rounded-xl shadow-[0_0_15px_rgba(0,0,0,0.1)]',
         )}
       >
-        {!user && (
+        {!user && !authBypass && (
           <div className="fixed right-4 top-4 z-10 flex flex-row gap-2">
             <Button
               variant="light"
@@ -325,6 +326,7 @@ export function PromptView() {
                   }}
                   onFocus={() => {
                     if (!user) {
+                      if (authBypass) return;
                       if (ssoProvider) {
                         signInWithSso();
                         return;

@@ -6,6 +6,7 @@ import { useNavigate } from '@tanstack/react-router';
 import posthog from 'posthog-js';
 import { AuthContext, type BillingStatus, getLevel } from './AuthContext';
 import { apiJson } from '@/services/api';
+import { authBypass, bypassCredentials } from '@/lib/authBypass';
 import { z } from 'zod';
 
 // Build an absolute, same-frontend redirect URL for Supabase auth emails / OAuth.
@@ -85,9 +86,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const {
           data: { session },
         } = await supabase.auth.refreshSession();
-        setSession(session);
-        localStorage.setItem('session', JSON.stringify(session));
-        setUser(session?.user ?? null);
+
+        if (session) {
+          setSession(session);
+          localStorage.setItem('session', JSON.stringify(session));
+          setUser(session.user);
+          return;
+        }
+
+        // Experiment mode: auto-sign in as the seeded local user so the
+        // login UI never appears. Needs a running Supabase with seed.sql.
+        if (authBypass) {
+          const { data, error } =
+            await supabase.auth.signInWithPassword(bypassCredentials);
+          if (error) {
+            console.error('VITE_BYPASS_AUTH sign-in failed:', error.message);
+            setSession(null);
+            setUser(null);
+            return;
+          }
+          setSession(data.session);
+          localStorage.setItem('session', JSON.stringify(data.session));
+          setUser(data.user);
+          return;
+        }
+
+        setSession(null);
+        localStorage.setItem('session', JSON.stringify(null));
+        setUser(null);
       } finally {
         setIsLoading(false);
       }
@@ -120,7 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         return await apiJson('billing-status', {}, billingStatusSchema);
       } catch (err) {
-        if (import.meta.env.DEV) return LOCAL_BILLING_STATUS;
+        if (import.meta.env.DEV || authBypass) return LOCAL_BILLING_STATUS;
         throw err;
       }
     },
