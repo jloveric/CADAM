@@ -9,6 +9,9 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:network": "bash scripts/run-network.sh",
+    "start:network": "bash scripts/run-network.sh",
+    "test:openai": "bash scripts/test-openai.sh",
     "build": "tsc -b && vite build",
     "lint": "eslint . --ignore-pattern 'supabase/**'",
     "typecheck": "tsc -b --noEmit",
@@ -19,6 +22,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.78",
     "@ai-sdk/google": "^3.0.75",
+    "@ai-sdk/openai": "^3.0.84",
     "@ai-sdk/react": "^3.0.100",
     "@anthropic-ai/sdk": "^0.96.0",
     "@fal-ai/client": "^1.10.1",
