@@ -5,8 +5,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import posthog from 'posthog-js';
 import { AuthContext, type BillingStatus, getLevel } from './AuthContext';
-import { apiJson } from '@/services/api';
-import { authBypass, bypassCredentials } from '@/lib/authBypass';
+import { apiJson, apiUrl } from '@/services/api';
+import { authBypass } from '@/lib/authBypass';
 import { z } from 'zod';
 
 // Build an absolute, same-frontend redirect URL for Supabase auth emails / OAuth.
@@ -83,6 +83,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
+        // Experiment mode: ask THIS app server (same origin / VPN URL) to
+        // sign in as the shared test user against local Supabase. Remotes
+        // never talk to 127.0.0.1:54321 for auth.
+        if (authBypass) {
+          const response = await fetch(apiUrl('dev-session'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          const payload: unknown = await response.json();
+          if (!response.ok) {
+            const message =
+              typeof payload === 'object' &&
+              payload !== null &&
+              'error' in payload &&
+              typeof Reflect.get(payload, 'error') === 'string'
+                ? String(Reflect.get(payload, 'error'))
+                : response.statusText;
+            console.error('VITE_BYPASS_AUTH /api/dev-session failed:', message);
+            setSession(null);
+            setUser(null);
+            return;
+          }
+          const accessToken = Reflect.get(payload as object, 'access_token');
+          const refreshToken = Reflect.get(payload as object, 'refresh_token');
+          if (
+            typeof accessToken !== 'string' ||
+            typeof refreshToken !== 'string'
+          ) {
+            console.error('VITE_BYPASS_AUTH /api/dev-session: missing tokens');
+            setSession(null);
+            setUser(null);
+            return;
+          }
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (error || !data.session) {
+            console.error(
+              'VITE_BYPASS_AUTH setSession failed:',
+              error?.message ?? 'no session',
+            );
+            setSession(null);
+            setUser(null);
+            return;
+          }
+          setSession(data.session);
+          localStorage.setItem('session', JSON.stringify(data.session));
+          setUser(data.session.user);
+          return;
+        }
+
         const {
           data: { session },
         } = await supabase.auth.refreshSession();
@@ -91,23 +143,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setSession(session);
           localStorage.setItem('session', JSON.stringify(session));
           setUser(session.user);
-          return;
-        }
-
-        // Experiment mode: auto-sign in as the seeded local user so the
-        // login UI never appears. Needs a running Supabase with seed.sql.
-        if (authBypass) {
-          const { data, error } =
-            await supabase.auth.signInWithPassword(bypassCredentials);
-          if (error) {
-            console.error('VITE_BYPASS_AUTH sign-in failed:', error.message);
-            setSession(null);
-            setUser(null);
-            return;
-          }
-          setSession(data.session);
-          localStorage.setItem('session', JSON.stringify(data.session));
-          setUser(data.user);
           return;
         }
 
@@ -143,10 +178,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     enabled: !!user,
     refetchInterval: 30000,
     queryFn: async (): Promise<BillingStatus> => {
+      // Shared experiment user: never block the composer on billing.
+      if (authBypass) return LOCAL_BILLING_STATUS;
       try {
         return await apiJson('billing-status', {}, billingStatusSchema);
       } catch (err) {
-        if (import.meta.env.DEV || authBypass) return LOCAL_BILLING_STATUS;
+        if (import.meta.env.DEV) return LOCAL_BILLING_STATUS;
         throw err;
       }
     },
@@ -175,7 +212,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Set up real-time subscription for meshes table to update meshData immediately and notify the user
   useEffect(() => {
-    if (!user) {
+    // Bypass mode proxies Supabase over HTTP only — skip websocket realtime.
+    if (!user || authBypass) {
       return;
     }
 

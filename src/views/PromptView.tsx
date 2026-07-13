@@ -94,6 +94,9 @@ export function PromptView() {
 
   const limitReached = useMemo(() => {
     if (isLoading) return false;
+    // Bypass mode must never lock the textarea (missing billing used to
+    // look like 0 tokens and disable typing for remote users).
+    if (authBypass) return false;
     return totalTokens <= 0;
   }, [totalTokens, isLoading]);
 

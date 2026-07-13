@@ -1,4 +1,4 @@
-/** Local/experiment mode: skip the login UI by auto-signing in. */
+/** Local/experiment mode: skip login; everyone shares the seeded test user. */
 export const authBypass =
   import.meta.env.VITE_BYPASS_AUTH === 'true' ||
   import.meta.env.VITE_BYPASS_AUTH === '1';

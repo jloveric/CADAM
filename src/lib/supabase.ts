@@ -1,5 +1,6 @@
 import { createClient, Provider, User } from '@supabase/supabase-js';
 import { Database } from '@shared/database';
+import { authBypass } from '@/lib/authBypass';
 
 const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const rawSupabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -44,13 +45,36 @@ export const ssoManaged = Boolean(ssoProvider && accountUrl);
 // for a self-hoster). undefined when SSO isn't managing the profile.
 export function ssoClaims(user: User | null) {
   if (!ssoManaged || !user) return undefined;
-  return user.identities?.find((i) => i.provider === ssoProvider)?.identity_data;
+  return user.identities?.find((i) => i.provider === ssoProvider)
+    ?.identity_data;
+}
+
+/**
+ * In experiment/bypass mode, point the browser at the same-origin Supabase
+ * proxy (`/api/supabase`) so remotes never need to reach 127.0.0.1:54321.
+ * The server keeps using VITE_SUPABASE_URL directly.
+ */
+export function browserSupabaseUrl(): string {
+  if (!authBypass || typeof window === 'undefined') {
+    return rawSupabaseUrl || 'http://localhost';
+  }
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+  return `${window.location.origin}${basePath}/api/supabase`;
 }
 
 // Fallback values keep the client constructable so imports don't throw
 // when env vars are missing. The app should gate on isSupabaseConfigMissing
 // and avoid making real requests in this state.
-const supabaseUrl = rawSupabaseUrl || 'http://localhost';
 const supabaseKey = rawSupabaseKey || 'public-anon-key';
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseKey);
+export const supabase = createClient<Database>(
+  browserSupabaseUrl(),
+  supabaseKey,
+  authBypass
+    ? {
+        // Realtime websockets can't go through the HTTP proxy; mesh live
+        // updates are best-effort in experiment mode.
+        realtime: { params: { eventsPerSecond: 0 } },
+      }
+    : undefined,
+);
